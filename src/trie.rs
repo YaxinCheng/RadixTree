@@ -5,7 +5,7 @@ use crate::util;
 ///
 /// # Example
 /// ```rust
-/// use self::radix_trie::RadixTrie;
+/// use radix_trie::RadixTrie;
 /// let mut trie = RadixTrie::<usize>::new();
 /// trie.insert("ON", 3);
 /// trie.insert("ON20", 4)
@@ -30,6 +30,13 @@ impl<T> RadixTrie<T> {
 
     /// Insert label and associated value into the trie.
     /// Values will be override if the label provided is already in the trie
+    /// # Example
+    /// ```rust
+    /// use radix_trie::RadixTrie;
+    ///
+    /// let mut trie = RadixTrie::<()>::new();
+    /// trie.insert("label", ());
+    /// ```
     pub fn insert(&mut self, mut label: &str, value: T) {
         let mut entry = (&mut self.entry).children_mut();
         while label.len() > 0 {
@@ -90,6 +97,15 @@ impl<T> RadixTrie<T> {
 
     /// Returns the value associated with related label.
     /// If the label does not exist in the
+    /// # Example
+    /// ```rust
+    /// use radix_trie::RadixTrie;
+    ///
+    /// let mut trie = RadixTrie::<usize>::new();
+    /// trie.insert("label", 5);
+    /// assert_eq!(trie.find("label"), Some(&5));
+    /// assert_eq!(trie.find("not exist"), None);
+    /// ```
     pub fn find(&self, mut label: &str) -> Option<&T> {
         let mut entry = self.entry.children();
         while label.len() > 0 {
@@ -115,6 +131,15 @@ impl<T> RadixTrie<T> {
 
     /// Removes the value associated with related label.
     /// If the provided label does not exist in the trie, return None
+    /// # Example
+    /// ```rust
+    /// use radix_trie::RadixTrie;
+    ///
+    /// let mut trie = RadixTrie::<usize>::new();
+    /// trie.insert("label", 5);
+    /// assert_eq!(trie.remove("label"), Some(5));
+    /// assert_eq!(trie.remove("not exist"), None);
+    /// ```
     pub fn remove(&mut self, mut label: &str) -> Option<T> {
         let mut parent = &mut self.entry;
         while label.len() > 0 {
@@ -162,6 +187,15 @@ impl<T> RadixTrie<T> {
     }
 
     /// Returns all values with their labels where the labels start with given prefix
+    /// # Example
+    /// ```rust
+    /// use radix_trie::RadixTrie;
+    ///
+    /// let mut trie = RadixTrie::<usize>::new();
+    /// trie.insert("lab", 3);
+    /// trie.insert("label", 5);
+    /// assert_eq!(trie.start_with("la"), vec![(String::from("lab"), &3), (String::from("label"), &5)])
+    /// ```
     pub fn start_with(&self, mut prefix: &str) -> Vec<(String, &T)> {
         let mut entry = self.entry.children();
         let mut prefixes: Vec<&str> = vec![];
