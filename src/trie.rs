@@ -5,7 +5,7 @@ use crate::util;
 ///
 /// # Example
 /// ```rust
-/// use radix_trie::RadixTrie;
+/// use another_radix_trie::RadixTrie;
 /// let mut trie = RadixTrie::<usize>::new();
 /// trie.insert("ON", 3);
 /// trie.insert("ON20", 4)
@@ -32,7 +32,7 @@ impl<T> RadixTrie<T> {
     /// Values will be override if the label provided is already in the trie
     /// # Example
     /// ```rust
-    /// use radix_trie::RadixTrie;
+    /// use another_radix_trie::RadixTrie;
     ///
     /// let mut trie = RadixTrie::<()>::new();
     /// trie.insert("label", ());
@@ -99,7 +99,7 @@ impl<T> RadixTrie<T> {
     /// If the label does not exist in the
     /// # Example
     /// ```rust
-    /// use radix_trie::RadixTrie;
+    /// use another_radix_trie::RadixTrie;
     ///
     /// let mut trie = RadixTrie::<usize>::new();
     /// trie.insert("label", 5);
@@ -133,7 +133,7 @@ impl<T> RadixTrie<T> {
     /// If the provided label does not exist in the trie, return None
     /// # Example
     /// ```rust
-    /// use radix_trie::RadixTrie;
+    /// use another_radix_trie::RadixTrie;
     ///
     /// let mut trie = RadixTrie::<usize>::new();
     /// trie.insert("label", 5);
@@ -189,7 +189,7 @@ impl<T> RadixTrie<T> {
     /// Returns all values with their labels where the labels start with given prefix
     /// # Example
     /// ```rust
-    /// use radix_trie::RadixTrie;
+    /// use another_radix_trie::RadixTrie;
     ///
     /// let mut trie = RadixTrie::<usize>::new();
     /// trie.insert("lab", 3);

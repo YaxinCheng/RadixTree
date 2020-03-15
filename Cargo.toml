@@ -1,5 +1,5 @@
 [package]
-name = "radix_trie"
+name = "another_radix_trie"
 version = "0.1.0"
 authors = ["Yaxin Cheng <yaxin.cheng@dal.ca>"]
 edition = "2018"
