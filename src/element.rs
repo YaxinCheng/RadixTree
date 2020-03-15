@@ -57,18 +57,15 @@ impl<T> Element<T> {
     }
 
     pub fn children_mut(&mut self) -> &mut Vec<Element<T>> {
-        let (_, _, children) = unpack!(self);
-        children
+        unpack!(self).2
     }
 
     pub fn children(&self) -> &Vec<Element<T>> {
-        let (_, _, children) = unpack!(self);
-        children
+        unpack!(self).2
     }
 
     pub fn children_own(self) -> Vec<Element<T>> {
-        let (_, _, children) = unpack!(self);
-        children
+        unpack!(self).2
     }
 
     pub fn value(&self) -> Option<&T> {
@@ -86,10 +83,12 @@ impl<T> Element<T> {
         }
     }
 
+    /// Unpack element into label, value, and children
     pub fn unpack(self) -> (String, Option<T>, Vec<Element<T>>) {
         unpack!(self)
     }
 
+    /// Collect all the descendant values with their labels
     pub fn collect_all_child_values(&self) -> Vec<(String, &T)> {
         // contains all the parent labels
         let mut labels = vec![self.label().to_owned()];
@@ -115,5 +114,69 @@ impl<T> Element<T> {
             children.extend(element.children().into_iter().map(|child| (index, child)))
         }
         res
+    }
+}
+
+#[cfg(test)]
+mod element_tests {
+    use crate::element::Element;
+
+    fn get_test_example() -> Element<()> {
+        // vec![ "in", "industry", "industrial", "industrialization", "india", "indian", ];
+        Element::Base {
+            label: "in".into(),
+            children: vec![Element::Node {
+                label: "d".into(),
+                children: vec![
+                    Element::Value {
+                        label: "ustry".into(),
+                        value: (),
+                        children: vec![],
+                    },
+                    Element::Node {
+                        label: "ustri".into(),
+                        children: vec![Element::Value {
+                            label: "al".into(),
+                            value: (),
+                            children: vec![Element::Value {
+                                label: "ization".into(),
+                                value: (),
+                                children: vec![],
+                            }],
+                        }],
+                    },
+                    Element::Value {
+                        label: "ia".into(),
+                        value: (),
+                        children: vec![Element::Value {
+                            label: "n".into(),
+                            value: (),
+                            children: vec![],
+                        }],
+                    },
+                ],
+            }],
+        }
+    }
+
+    #[test]
+    fn test_collect_all_child_values() {
+        let test_example = get_test_example();
+        let res = test_example
+            .collect_all_child_values()
+            .into_iter()
+            .map(|(label, _)| label)
+            .collect::<Vec<_>>();
+        let expected = vec![
+            "industry",
+            "india",
+            "industrial",
+            "indian",
+            "industrialization",
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect::<Vec<_>>();
+        assert_eq!(res, expected)
     }
 }

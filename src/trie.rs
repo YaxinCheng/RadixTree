@@ -1,6 +1,5 @@
 use crate::element::Element;
 use crate::util;
-use std::fmt::Debug;
 
 /// RadixTrie stores values associated with strings
 ///
@@ -14,11 +13,12 @@ use std::fmt::Debug;
 /// // - "ON" 3
 /// //    - "20" 4
 /// ```
-pub struct RadixTrie<T: Debug> {
+pub struct RadixTrie<T> {
     entry: Element<T>,
 }
 
-impl<T: Debug> RadixTrie<T> {
+impl<T> RadixTrie<T> {
+    /// Construct a new trie
     pub fn new() -> Self {
         RadixTrie {
             entry: Element::Base {
@@ -28,6 +28,8 @@ impl<T: Debug> RadixTrie<T> {
         }
     }
 
+    /// Insert label and associated value into the trie.
+    /// Values will be override if the label provided is already in the trie
     pub fn insert(&mut self, mut label: &str, value: T) {
         let mut entry = (&mut self.entry).children_mut();
         while label.len() > 0 {
@@ -86,7 +88,8 @@ impl<T: Debug> RadixTrie<T> {
         }
     }
 
-    /// Returns the value associated with related label
+    /// Returns the value associated with related label.
+    /// If the label does not exist in the
     pub fn find(&self, mut label: &str) -> Option<&T> {
         let mut entry = self.entry.children();
         while label.len() > 0 {
@@ -110,7 +113,8 @@ impl<T: Debug> RadixTrie<T> {
         None
     }
 
-    /// Removes the value associated with related label
+    /// Removes the value associated with related label.
+    /// If the provided label does not exist in the trie, return None
     pub fn remove(&mut self, mut label: &str) -> Option<T> {
         let mut parent = &mut self.entry;
         while label.len() > 0 {
@@ -157,7 +161,7 @@ impl<T: Debug> RadixTrie<T> {
         None
     }
 
-    /// Returns all values with their labels where the labels have given prefix
+    /// Returns all values with their labels where the labels start with given prefix
     pub fn start_with(&self, mut prefix: &str) -> Vec<(String, &T)> {
         let mut entry = self.entry.children();
         let mut prefixes: Vec<&str> = vec![];
