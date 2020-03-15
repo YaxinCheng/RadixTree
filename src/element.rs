@@ -111,21 +111,17 @@ impl<T> Element<T> {
             .collect::<VecDeque<_>>();
         while let Some((prefix_index, element)) = children.pop_front() {
             // if element is Value, get the value and joined label
-            let (label, value) = match value!(element) {
-                Some(value) => (
-                    format!("{}{}", labels[prefix_index], element.label()),
-                    value,
-                ),
-                None => continue,
+            let index = match value!(element) {
+                Some(value) => {
+                    let label = format!("{}{}", labels[prefix_index], element.label());
+                    labels.push(label.clone());
+                    res.push((label, value));
+                    labels.len() - 1
+                }
+                None => prefix_index,
             };
             // update the label storage
-            labels.push(label.clone());
-            res.push((label, value));
-            children.extend(
-                children!(element)
-                    .into_iter()
-                    .map(|child| (labels.len() - 1, child)),
-            )
+            children.extend(children!(element).into_iter().map(|child| (index, child)))
         }
         res
     }
