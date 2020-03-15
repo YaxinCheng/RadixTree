@@ -11,47 +11,30 @@ pub enum Element<T> {
         label: String,
         children: Vec<Element<T>>,
     },
+    Base {
+        label: String,
+        children: Vec<Element<T>>,
+    },
 }
 
-macro_rules! children {
+macro_rules! unpack {
     ( $element: expr ) => {
         match $element {
             Element::Value {
-                label: _,
-                value: _,
-                children,
-            }
-            | Element::Node { label: _, children } => children,
-        }
-    };
-}
-
-macro_rules! value {
-    ( $element: expr ) => {
-        match $element {
-            Element::Value {
-                label: _,
+                label,
                 value,
-                children: _,
-            } => Some(value),
-            Element::Node {
-                label: _,
-                children: _,
-            } => None,
+                children,
+            } => (label, Some(value), children),
+            Element::Node { label, children } => (label, None, children),
+            Element::Base { label, children } => (label, None, children),
         }
     };
 }
 
 impl<T> Element<T> {
     pub fn label(&self) -> &str {
-        match self {
-            Element::Value {
-                label,
-                value: _,
-                children: _,
-            }
-            | Element::Node { label, children: _ } => label,
-        }
+        let (label, _, _) = unpack!(self);
+        label
     }
 
     pub fn set_label(self, label: String) -> Self {
@@ -66,40 +49,51 @@ impl<T> Element<T> {
                 children,
             },
             Element::Node { label: _, children } => Element::Node { label, children },
+            Element::Base {
+                label: _,
+                children: _,
+            } => panic!("Cannot set base"),
         }
     }
 
     pub fn children_mut(&mut self) -> &mut Vec<Element<T>> {
-        children!(self)
+        let (_, _, children) = unpack!(self);
+        children
     }
 
     pub fn children(&self) -> &Vec<Element<T>> {
-        children!(self)
+        let (_, _, children) = unpack!(self);
+        children
     }
 
     pub fn children_own(self) -> Vec<Element<T>> {
-        children!(self)
+        let (_, _, children) = unpack!(self);
+        children
     }
 
     pub fn value(&self) -> Option<&T> {
-        value!(self)
+        let (_, value, _) = unpack!(self);
+        value
+    }
+
+    pub fn is_node(&self) -> bool {
+        match self {
+            Element::Node {
+                label: _,
+                children: _,
+            } => true,
+            _ => false,
+        }
     }
 
     pub fn unpack(self) -> (String, Option<T>, Vec<Element<T>>) {
-        match self {
-            Element::Value {
-                label,
-                value,
-                children,
-            } => (label, Some(value), children),
-            Element::Node { label, children } => (label, None, children),
-        }
+        unpack!(self)
     }
 
     pub fn collect_all_child_values(&self) -> Vec<(String, &T)> {
         // contains all the parent labels
         let mut labels = vec![self.label().to_owned()];
-        let mut res = match value!(self) {
+        let mut res = match self.value() {
             Some(value) => vec![(self.label().to_owned(), value)],
             None => vec![],
         };
@@ -114,11 +108,11 @@ impl<T> Element<T> {
             let label = format!("{}{}", labels[prefix_index], element.label());
             labels.push(label);
             let index = labels.len() - 1;
-            if let Some(value) = value!(element) {
+            if let Some(value) = element.value() {
                 res.push((labels[index].to_owned(), value));
             }
             // update the label storage
-            children.extend(children!(element).into_iter().map(|child| (index, child)))
+            children.extend(element.children().into_iter().map(|child| (index, child)))
         }
         res
     }

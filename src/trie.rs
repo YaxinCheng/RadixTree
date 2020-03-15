@@ -1,5 +1,6 @@
 use crate::element::Element;
 use crate::util;
+use std::fmt::Debug;
 
 /// RadixTrie stores values associated with strings
 ///
@@ -13,17 +14,22 @@ use crate::util;
 /// // - "ON" 3
 /// //    - "20" 4
 /// ```
-pub struct RadixTrie<T> {
-    entry: Vec<Element<T>>,
+pub struct RadixTrie<T: Debug> {
+    entry: Element<T>,
 }
 
-impl<T> RadixTrie<T> {
+impl<T: Debug> RadixTrie<T> {
     pub fn new() -> Self {
-        RadixTrie { entry: Vec::new() }
+        RadixTrie {
+            entry: Element::Base {
+                label: "".to_owned(),
+                children: vec![],
+            },
+        }
     }
 
     pub fn insert(&mut self, mut label: &str, value: T) {
-        let mut entry = &mut self.entry;
+        let mut entry = (&mut self.entry).children_mut();
         while label.len() > 0 {
             let label_init_char = label.chars().next().unwrap();
             let target_index = util::binary_search(label_init_char, &entry);
@@ -38,7 +44,12 @@ impl<T> RadixTrie<T> {
             } else if shared_prefix == label {
                 let children = match target.label() == label {
                     true => entry.remove(target_index).children_own(), // new value to replace the old value. Inherits the old one's children
-                    false => vec![entry.remove(target_index)], // add the old value as a child
+                    false => {
+                        let shared_prefix_len = shared_prefix.len();
+                        let old_element = entry.remove(target_index);
+                        let new_label = old_element.label()[shared_prefix_len..].to_owned();
+                        vec![old_element.set_label(new_label)]
+                    } // add the old value as a child
                 };
                 let item = util::element_new_value(label, value, children);
                 return entry.insert(target_index, item);
@@ -77,7 +88,7 @@ impl<T> RadixTrie<T> {
 
     /// Returns the value associated with related label
     pub fn find(&self, mut label: &str) -> Option<&T> {
-        let mut entry = &self.entry;
+        let mut entry = self.entry.children();
         while label.len() > 0 {
             let target_index = util::binary_search(label.chars().next().unwrap(), &entry);
             if target_index >= entry.len() {
@@ -101,33 +112,44 @@ impl<T> RadixTrie<T> {
 
     /// Removes the value associated with related label
     pub fn remove(&mut self, mut label: &str) -> Option<T> {
-        let mut entry = &mut self.entry;
+        let mut parent = &mut self.entry;
         while label.len() > 0 {
-            let target_index = util::binary_search(label.chars().next().unwrap(), &entry);
-            if target_index >= entry.len() {
+            let parent_is_node = parent.is_node();
+            let target_index =
+                util::binary_search(label.chars().next().unwrap(), parent.children());
+            if target_index >= parent.children().len() {
                 break;
             }
-            let target = &entry[target_index];
+            let target = &parent.children()[target_index];
             if target.label() == label {
                 // existing_label matches label
-                let (label, value, mut children) = entry.remove(target_index).unpack();
+                let (label, value, mut children) =
+                    parent.children_mut().remove(target_index).unpack();
                 if children.len() > 1 {
                     // target node has more than one children. Make target node a none value node
-                    entry.insert(target_index, Element::Node { label, children });
+                    parent
+                        .children_mut()
+                        .insert(target_index, Element::Node { label, children });
                 } else if children.len() == 1 {
                     // Only one child. Make the child parent
                     let child = children.pop().unwrap();
                     // Connect parent prefix with the child label
                     let child_label_prepend_parent_prefix = format!("{}{}", label, child.label());
-                    entry.insert(
+                    parent.children_mut().insert(
                         target_index,
                         child.set_label(child_label_prepend_parent_prefix),
                     );
                 }
+                // if parent has only one node child and parent is node. Merge them
+                if parent.children().len() == 1 && parent_is_node {
+                    let another_child = parent.children_mut().pop().unwrap();
+                    let label = format!("{}{}", parent.label(), another_child.label());
+                    *parent = another_child.set_label(label);
+                }
                 return value;
             } else if label.starts_with(target.label()) {
                 label = &label[target.label().len()..];
-                entry = (&mut entry[target_index]).children_mut();
+                parent = &mut parent.children_mut()[target_index];
             } else {
                 break;
             }
@@ -137,7 +159,7 @@ impl<T> RadixTrie<T> {
 
     /// Returns all values with their labels where the labels have given prefix
     pub fn start_with(&self, mut prefix: &str) -> Vec<(String, &T)> {
-        let mut entry = &self.entry;
+        let mut entry = self.entry.children();
         let mut prefixes: Vec<&str> = vec![];
         while prefix.len() > 0 {
             let target_index = util::binary_search(prefix.chars().next().unwrap(), &entry);
@@ -228,5 +250,28 @@ mod trie_tests {
             ("Wonderful".into(), &9),
         ];
         assert_eq!(res, expected)
+    }
+
+    #[test]
+    fn test_remove_with_merge_down() {
+        let mut trie = RadixTrie::<usize>::new();
+        trie.insert("exe", 3);
+        trie.insert("execute", 7);
+        trie.insert("exec", 4);
+        trie.insert("example", 7);
+        trie.remove("exec").expect("Removed exec");
+        let cute = &trie.entry.children()[0].children()[1].children()[0];
+        assert_eq!(cute.label(), "cute");
+    }
+
+    #[test]
+    fn test_remove_with_merge_up() {
+        let mut trie = RadixTrie::<usize>::new();
+        trie.insert("exe", 3);
+        trie.insert("execute", 7);
+        trie.insert("exec", 4);
+        trie.insert("example", 7);
+        trie.remove("example").expect("Removed example");
+        assert_eq!(trie.entry.children()[0].label(), "exe");
     }
 }
