@@ -30,18 +30,19 @@ impl<T> RadixTrie<T> {
             if target_index >= entry.len() {
                 return entry.push(util::element_new_value(label, value, vec![]));
             }
-            let shared_prefix = util::longest_shared_prefix(entry[target_index].label(), label);
+            let target = &entry[target_index];
+            let shared_prefix = util::longest_shared_prefix(target.label(), label);
             if shared_prefix.is_empty() {
                 // no shared prefix, insert directly
                 return entry.insert(target_index, util::element_new_value(label, value, vec![]));
             } else if shared_prefix == label {
-                let children = match entry[target_index].label() == label {
+                let children = match target.label() == label {
                     true => entry.remove(target_index).children_own(), // new value to replace the old value. Inherits the old one's children
                     false => vec![entry.remove(target_index)], // add the old value as a child
                 };
                 let item = util::element_new_value(label, value, children);
                 return entry.insert(target_index, item);
-            } else if shared_prefix == entry[target_index].label() {
+            } else if shared_prefix == target.label() {
                 // existing one is the prefix
                 label = &label[shared_prefix.len()..]; // search the parts after the shared prefix
                 entry = (&mut entry[target_index]).children_mut();
@@ -82,14 +83,14 @@ impl<T> RadixTrie<T> {
             if target_index >= entry.len() {
                 break;
             }
-            let existing_label = entry[target_index].label();
-            if existing_label == label {
+            let target = &entry[target_index];
+            if target.label() == label {
                 // found label
-                return entry[target_index].value();
-            } else if label.starts_with(existing_label) {
+                return target.value();
+            } else if label.starts_with(target.label()) {
                 // existing_label matches the prefix of label. Move to next node
-                label = &label[entry[target_index].label().len()..];
-                entry = &entry[target_index].children();
+                label = &label[target.label().len()..];
+                entry = target.children();
             } else {
                 // not matched
                 break;
@@ -106,8 +107,8 @@ impl<T> RadixTrie<T> {
             if target_index >= entry.len() {
                 break;
             }
-            let existing_label = entry[target_index].label();
-            if existing_label == label {
+            let target = &entry[target_index];
+            if target.label() == label {
                 // existing_label matches label
                 let (label, value, mut children) = entry.remove(target_index).unpack();
                 if children.len() > 1 {
@@ -124,8 +125,8 @@ impl<T> RadixTrie<T> {
                     );
                 }
                 return value;
-            } else if label.starts_with(existing_label) {
-                label = &label[entry[target_index].label().len()..];
+            } else if label.starts_with(target.label()) {
+                label = &label[target.label().len()..];
                 entry = (&mut entry[target_index]).children_mut();
             } else {
                 break;
@@ -137,19 +138,26 @@ impl<T> RadixTrie<T> {
     /// Returns all values with their labels where the labels have given prefix
     pub fn start_with(&self, mut prefix: &str) -> Vec<(String, &T)> {
         let mut entry = &self.entry;
+        let mut prefixes: Vec<&str> = vec![];
         while prefix.len() > 0 {
             let target_index = util::binary_search(prefix.chars().next().unwrap(), &entry);
             if target_index >= entry.len() {
                 break;
             }
-            let existing_label = entry[target_index].label();
-            if existing_label.starts_with(prefix) {
+            let target = &entry[target_index];
+            if target.label().starts_with(prefix) {
                 // found label
-                return entry[target_index].collect_all_child_values();
-            } else if prefix.starts_with(existing_label) {
+                let existing_prefix: String = prefixes.join("");
+                return target
+                    .collect_all_child_values()
+                    .into_iter()
+                    .map(|(prefix, value)| (format!("{}{}", existing_prefix, prefix), value))
+                    .collect();
+            } else if prefix.starts_with(target.label()) {
                 // existing_label matches the prefix of label. Move to next node
-                prefix = &prefix[entry[target_index].label().len()..];
-                entry = &entry[target_index].children();
+                prefixes.push(target.label());
+                prefix = &prefix[target.label().len()..];
+                entry = target.children();
             } else {
                 // not matched
                 break;
@@ -200,6 +208,22 @@ mod trie_tests {
         let expected: Vec<(String, &usize)> = vec![
             ("Won".into(), &3),
             ("World".into(), &5),
+            ("Wonder".into(), &6),
+            ("Wonderful".into(), &9),
+        ];
+        assert_eq!(res, expected)
+    }
+
+    #[test]
+    fn test_start_with_won() {
+        let mut trie = RadixTrie::<usize>::new();
+        let words = ["Won", "Wonder", "Wonderful", "World", "Axes"];
+        for word in &words {
+            trie.insert(word, word.len())
+        }
+        let res = trie.start_with("Won");
+        let expected: Vec<(String, &usize)> = vec![
+            ("Won".into(), &3),
             ("Wonder".into(), &6),
             ("Wonderful".into(), &9),
         ];
