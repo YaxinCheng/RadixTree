@@ -95,7 +95,7 @@ impl<T> RadixTrie<T> {
         }
     }
 
-    /// Returns the value associated with related label.
+    /// Returns the borrowed value associated with related label.
     /// If the label does not exist in the
     /// # Example
     /// ```rust
@@ -121,6 +121,40 @@ impl<T> RadixTrie<T> {
                 // existing_label matches the prefix of label. Move to next node
                 label = &label[target.label().len()..];
                 entry = target.children();
+            } else {
+                // not matched
+                break;
+            }
+        }
+        None
+    }
+
+    /// Returns the mutable borrowed value associated with related label.
+    /// If the label does not exist in the
+    /// # Example
+    /// ```rust
+    /// use another_radix_trie::RadixTrie;
+    ///
+    /// let mut trie = RadixTrie::<usize>::new();
+    /// trie.insert("label", 5);
+    /// assert_eq!(trie.find_mut("label"), Some(&mut 5));
+    /// assert_eq!(trie.find("not exist"), None);
+    /// ```
+    pub fn find_mut(&mut self, mut label: &str) -> Option<&mut T> {
+        let mut entry = self.entry.children_mut();
+        while label.len() > 0 {
+            let target_index = util::binary_search(label.chars().next().unwrap(), &entry);
+            if target_index >= entry.len() {
+                break;
+            }
+            let target = &mut entry[target_index];
+            if target.label() == label {
+                // found label
+                return target.value_mut();
+            } else if label.starts_with(target.label()) {
+                // existing_label matches the prefix of label. Move to next node
+                label = &label[target.label().len()..];
+                entry = target.children_mut();
             } else {
                 // not matched
                 break;
@@ -311,5 +345,16 @@ mod trie_tests {
         trie.insert("example", 7);
         trie.remove("example").expect("Removed example");
         assert_eq!(trie.entry.children()[0].label(), "exe");
+    }
+
+    #[test]
+    fn test_insert_find_mut() {
+        let mut trie = RadixTrie::<usize>::new();
+        trie.insert("ON", 647);
+        let found = trie.find_mut("ON");
+        assert_eq!(found, Some(&mut 647));
+        *found.unwrap() = 416;
+        let found = trie.find("ON");
+        assert_eq!(found, Some(&416));
     }
 }

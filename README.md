@@ -25,6 +25,12 @@ trie.find("label");
 // returns Some(&"value")
 ```
 
+Find_mut
+```rust
+trie.find_mut("label");
+// returns Some(&mut "value")
+```
+
 Remove
 ```rust
 trie.remove("label");

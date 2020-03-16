@@ -33,8 +33,7 @@ macro_rules! unpack {
 
 impl<T> Element<T> {
     pub fn label(&self) -> &str {
-        let (label, _, _) = unpack!(self);
-        label
+        unpack!(self).0
     }
 
     pub fn set_label(self, label: String) -> Self {
@@ -69,8 +68,11 @@ impl<T> Element<T> {
     }
 
     pub fn value(&self) -> Option<&T> {
-        let (_, value, _) = unpack!(self);
-        value
+        unpack!(self).1
+    }
+
+    pub fn value_mut(&mut self) -> Option<&mut T> {
+        unpack!(self).1
     }
 
     pub fn is_node(&self) -> bool {
