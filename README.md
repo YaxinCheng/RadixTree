@@ -1,8 +1,8 @@
 # another_radix_trie
 Rust built radix tree with sorted vec
 
-[![crate](https://img.shields.io/badge/crates.io-0.1.0-orange)](https://crates.io/crates/another_radix_trie)
-[![doc](https://img.shields.io/badge/docs-0.1.0-blue)](https://docs.rs/another_radix_trie/0.1.0/another_radix_trie/)
+[![crate](https://img.shields.io/badge/crates.io-0.1.2-orange)](https://crates.io/crates/another_radix_trie)
+[![doc](https://img.shields.io/badge/docs-0.1.2-blue)](https://docs.rs/another_radix_trie/0.1.0/another_radix_trie/)
 ![build](https://img.shields.io/badge/build-passing-success)
 ![licence](https://img.shields.io/badge/licence-MIT-informational)
 
