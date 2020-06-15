@@ -15,13 +15,16 @@ pub fn binary_search<T>(target: char, array: &Vec<Element<T>>) -> usize {
     first
 }
 
-pub fn longest_shared_prefix<'a>(s1: &'a str, s2: &'a str) -> &'a str {
-    for (index, (char1, char2)) in s1.chars().zip(s2.chars()).enumerate() {
+pub fn longest_shared_prefix(s1: &str, s2: &str) -> String {
+    let mut shared = String::new();
+    for (char1, char2) in s1.chars().zip(s2.chars()) {
         if char1 != char2 {
-            return &s1[..index];
+            return shared;
+        } else {
+            shared.push(char1);
         }
     }
-    return if s1.len() > s2.len() { s2 } else { s1 };
+    return (if s1.len() > s2.len() { s2 } else { s1 }).to_owned();
 }
 
 /// A helper function to create an value element
