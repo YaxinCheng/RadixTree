@@ -15,16 +15,13 @@ pub fn binary_search<T>(target: char, array: &Vec<Element<T>>) -> usize {
     first
 }
 
-pub fn longest_shared_prefix(s1: &str, s2: &str) -> String {
-    let mut shared = String::new();
-    for (char1, char2) in s1.chars().zip(s2.chars()) {
+pub fn longest_shared_prefix<'a>(s1: &'a str, s2: &'a str) -> &'a str {
+    for ((index1, char1), char2) in s1.char_indices().zip(s2.chars()) {
         if char1 != char2 {
-            return shared;
-        } else {
-            shared.push(char1);
+            return &s1[..index1];
         }
     }
-    return (if s1.len() > s2.len() { s2 } else { s1 }).to_owned();
+    return if s1.len() > s2.len() { s2 } else { s1 };
 }
 
 /// A helper function to create an value element
@@ -37,5 +34,18 @@ pub fn element_new_value<T, S: ToString>(
         label: label.to_string(),
         value,
         children,
+    }
+}
+
+#[cfg(test)]
+mod util_tests {
+    use crate::util;
+
+    #[test]
+    fn longest_shared_prefix_non_alphabetic_test() {
+        let s1 = "Toronto多倫多";
+        let s2 = "Toronto多伦多";
+        let prefix = util::longest_shared_prefix(s1, s2);
+        assert_eq!(prefix, "Toronto多");
     }
 }
