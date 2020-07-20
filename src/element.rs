@@ -56,8 +56,25 @@ impl<T> Element<T> {
         unpack!(self).2
     }
 
-    pub fn children_own(self) -> Vec<Element<T>> {
-        unpack!(self).2
+    /// Converts the Element::Node to Element::Value
+    pub fn node_to_value(node: &mut Element<T>, value: T) {
+        assert!(matches!(node, Element::Node {..}));
+        let children = node.take_children();
+        *node = Element::Value {
+            label: node.label().to_string(),
+            value,
+            children,
+        }
+    }
+
+    fn take_children(&mut self) -> Vec<Element<T>> {
+        let children = self.children_mut();
+        let mut old = Vec::with_capacity(children.capacity());
+        while let Some(child) = children.pop() {
+            old.push(child);
+        }
+        old.reverse();
+        old
     }
 
     pub fn value(&self) -> Option<&T> {

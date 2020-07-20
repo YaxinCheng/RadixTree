@@ -19,7 +19,7 @@ pub struct RadixTrie<T> {
 }
 
 /// Outcome of a searching with a given label against an entry
-enum FindOutcome {
+enum FindOutcome<'a> {
     /// The given label matches the label of an element.
     /// The index of that element is included
     /// Example:
@@ -35,11 +35,15 @@ enum FindOutcome {
     /// Example:
     /// - given: 'lab', find: 'label'
     AsPrefixOf(usize),
+    /// The given label intersects with an element's label
+    /// The index of that element and the shared common substring are included
+    /// Example:
+    /// - given: 'label', find: 'lazy'
+    Intersects(usize, &'a str),
     /// The given label is not a match to an element
     /// The expected index for the given label is returned
     /// Example:
-    /// - given: 'label', find 'lazy' (intersects but not matched)
-    /// - given: 'label', find 'fox' (not matched at all)
+    /// - given: 'label', find 'fox'
     NotMatch(usize),
     /// The given label is suppose to be the last element of the entry
     BeyondSizeLimit,
@@ -71,33 +75,20 @@ impl<T> RadixTrie<T> {
             match Self::find_from_entry(&entry, label) {
                 BeyondSizeLimit => return entry.push(util::value_element(label, value, vec![])),
                 AsPrefixOf(index) => return Self::insert_prefix_node(entry, index, label, value),
+                Intersects(index, shared_prefix) => {
+                    let shared_prefix = shared_prefix.to_owned();
+                    return Self::join_intersected_nodes(entry, index, shared_prefix, label, value);
+                }
                 NotMatch(index) => {
-                    let target = &entry[index];
-                    let shared_prefix = util::longest_shared_prefix(target.label(), label);
-                    let merged_value = if shared_prefix.is_empty() {
-                        // no shared prefix means no overlap with the existing value
-                        util::value_element(label, value, vec![])
-                    } else {
-                        // creates a common parent node
-                        let shared_prefix = shared_prefix.to_owned();
-                        let origin = entry.remove(index);
-                        let new_node =
-                            util::value_element(&label[shared_prefix.len()..], value, vec![]);
-                        Self::join_intersected_nodes(origin, new_node, shared_prefix)
-                    };
-                    return entry.insert(index, merged_value);
+                    let merged = util::value_element(label, value, vec![]);
+                    return entry.insert(index, merged);
                 }
                 ExactMatch(index) => {
                     let target = &mut entry[index];
-                    if let Some(old_value) = target.value_mut() {
-                        // replace existing value
-                        *old_value = value;
-                    } else {
-                        // if the existing one is Node, make it a Value
-                        let children = entry.remove(index).children_own();
-                        entry.insert(index, util::value_element(label, value, children));
-                    }
-                    return;
+                    return match target.value_mut() {
+                        Some(old_value) => *old_value = value,
+                        None => Element::node_to_value(&mut entry[index], value),
+                    };
                 }
                 PrefixMatch(index) => {
                     let target = &mut entry[index];
@@ -117,17 +108,22 @@ impl<T> RadixTrie<T> {
 
     /// When two nodes have intersected labels, call this helper to process
     fn join_intersected_nodes(
-        mut original: Element<T>,
-        new: Element<T>,
+        entry: &mut Vec<Element<T>>,
+        index: usize,
         shared_prefix: String,
-    ) -> Element<T> {
+        label: &str,
+        value: T,
+    ) {
+        let mut original = entry.remove(index);
         original.remove_label_prefix(shared_prefix.len());
+        let new = util::value_element(&label[shared_prefix.len()..], value, vec![]);
         let mut children = vec![original, new];
         children.sort_by(|e1, e2| e1.label().cmp(e2.label()));
-        Element::Node {
+        let merged = Element::Node {
             label: shared_prefix,
             children,
-        }
+        };
+        entry.insert(index, merged)
     }
 
     /// Returns the borrowed value associated with related label.
@@ -145,7 +141,7 @@ impl<T> RadixTrie<T> {
         let mut entry = self.entry.children();
         while label.len() > 0 {
             match Self::find_from_entry(&entry, label) {
-                NotMatch(_) | AsPrefixOf(_) | BeyondSizeLimit => break,
+                NotMatch(_) | AsPrefixOf(_) | Intersects(_, _) | BeyondSizeLimit => break,
                 PrefixMatch(target_index) => {
                     let target = &entry[target_index];
                     label = &label[target.label().len()..];
@@ -174,7 +170,7 @@ impl<T> RadixTrie<T> {
         let mut entry = self.entry.children_mut();
         while label.len() > 0 {
             match Self::find_from_entry(&entry, label) {
-                NotMatch(_) | AsPrefixOf(_) | BeyondSizeLimit => break,
+                NotMatch(_) | AsPrefixOf(_) | Intersects(_, _) | BeyondSizeLimit => break,
                 PrefixMatch(target_index) => {
                     let target = &mut entry[target_index];
                     label = &label[target.label().len()..];
@@ -203,7 +199,7 @@ impl<T> RadixTrie<T> {
         let mut parent = &mut self.entry;
         while label.len() > 0 {
             match Self::find_from_entry(parent.children(), label) {
-                BeyondSizeLimit | NotMatch(_) | AsPrefixOf(_) => break,
+                BeyondSizeLimit | NotMatch(_) | Intersects(_, _) | AsPrefixOf(_) => break,
                 ExactMatch(target_index) => {
                     let parent_is_node = parent.is_node();
                     let (label, value, mut children) =
@@ -252,7 +248,7 @@ impl<T> RadixTrie<T> {
         let mut prefixes: Vec<&str> = vec![];
         while prefix.len() > 0 {
             match Self::find_from_entry(entry, prefix) {
-                BeyondSizeLimit | NotMatch(_) => break,
+                BeyondSizeLimit | NotMatch(_) | Intersects(_, _) => break,
                 PrefixMatch(target_index) => {
                     // existing_label matches the prefix of label. Move to next node
                     let target = &entry[target_index];
@@ -273,26 +269,32 @@ impl<T> RadixTrie<T> {
         entry
             .collect_all_child_values()
             .into_iter()
-            .map(|(label, value)| (format!("{}{}", prefix, label), value))
+            .map(|(mut label, value)| {
+                label.insert_str(0, prefix);
+                (label, value)
+            })
             .collect()
     }
 
     /// Run a binary search on the given entry and return outcome based on different conditions
-    fn find_from_entry(entry: &[Element<T>], label: &str) -> FindOutcome {
+    fn find_from_entry<'a>(entry: &'a [Element<T>], label: &'a str) -> FindOutcome<'a> {
         let char = util::first_char(label);
         let target_index = util::binary_search(char, entry);
         if target_index >= entry.len() {
             return BeyondSizeLimit;
         }
         let target = entry[target_index].label();
-        if target == label {
+        let shared_prefix = util::longest_shared_prefix(label, target);
+        if shared_prefix.is_empty() {
+            NotMatch(target_index)
+        } else if target == label {
             ExactMatch(target_index)
-        } else if label.starts_with(target) {
+        } else if shared_prefix == target {
             PrefixMatch(target_index)
-        } else if target.starts_with(label) {
+        } else if shared_prefix == label {
             AsPrefixOf(target_index)
         } else {
-            NotMatch(target_index)
+            Intersects(target_index, shared_prefix)
         }
     }
 }
