@@ -1,6 +1,6 @@
 [package]
 name = "another_radix_trie"
-version = "0.1.3"
+version = "0.1.4"
 authors = ["Yaxin Cheng <yaxin.cheng@dal.ca>"]
 edition = "2018"
 license = "MIT"

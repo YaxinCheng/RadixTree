@@ -1,3 +1,4 @@
+use self::FindOutcome::*;
 use crate::element::Element;
 use crate::util;
 
@@ -15,6 +16,33 @@ use crate::util;
 /// ```
 pub struct RadixTrie<T> {
     entry: Element<T>,
+}
+
+/// Outcome of a searching with a given label against an entry
+enum FindOutcome {
+    /// The given label matches the label of an element.
+    /// The index of that element is included
+    /// Example:
+    /// - given: 'label', find: 'label'
+    ExactMatch(usize),
+    /// An element has a label that is also a prefix for the given label.
+    /// The index of that element is included
+    /// Example:
+    /// - given: 'label', find: 'lab'
+    PrefixMatch(usize),
+    /// The given label is a prefix of an element's label
+    /// The index of that element is included
+    /// Example:
+    /// - given: 'lab', find: 'label'
+    AsPrefixOf(usize),
+    /// The given label is not a match to an element
+    /// The expected index for the given label is returned
+    /// Example:
+    /// - given: 'label', find 'lazy' (intersects but not matched)
+    /// - given: 'label', find 'fox' (not matched at all)
+    NotMatch(usize),
+    /// The given label is suppose to be the last element of the entry
+    BeyondSizeLimit,
 }
 
 impl<T> RadixTrie<T> {
@@ -40,57 +68,64 @@ impl<T> RadixTrie<T> {
     pub fn insert(&mut self, mut label: &str, value: T) {
         let mut entry = (&mut self.entry).children_mut();
         while label.len() > 0 {
-            let label_init_char = label.chars().next().unwrap();
-            let target_index = util::binary_search(label_init_char, &entry);
-            if target_index >= entry.len() {
-                return entry.push(util::element_new_value(label, value, vec![]));
-            }
-            let target = &entry[target_index];
-            let shared_prefix = util::longest_shared_prefix(target.label(), label);
-            if shared_prefix.is_empty() {
-                // no shared prefix, insert directly
-                return entry.insert(target_index, util::element_new_value(label, value, vec![]));
-            } else if shared_prefix == label {
-                let children = match target.label() == label {
-                    true => entry.remove(target_index).children_own(), // new value to replace the old value. Inherits the old one's children
-                    false => {
-                        let shared_prefix_len = shared_prefix.len();
-                        let old_element = entry.remove(target_index);
-                        let new_label = old_element.label()[shared_prefix_len..].to_owned();
-                        vec![old_element.set_label(new_label)]
-                    } // add the old value as a child
-                };
-                let item = util::element_new_value(label, value, children);
-                return entry.insert(target_index, item);
-            } else if shared_prefix == target.label() {
-                // existing one is the prefix
-                label = &label[shared_prefix.len()..]; // search the parts after the shared prefix
-                entry = (&mut entry[target_index]).children_mut();
-            } else {
-                // The existing and newly adding one intersect
-                let shared_common = shared_prefix.to_owned();
-                let joined_item = Self::join_intersected_nodes(
-                    entry.remove(target_index),
-                    util::element_new_value(&label[shared_common.len()..], value, vec![]),
-                    shared_common,
-                );
-                return entry.insert(target_index, joined_item);
+            match Self::find_from_entry(&entry, label) {
+                BeyondSizeLimit => return entry.push(util::value_element(label, value, vec![])),
+                AsPrefixOf(index) => return Self::insert_prefix_node(entry, index, label, value),
+                NotMatch(index) => {
+                    let target = &entry[index];
+                    let shared_prefix = util::longest_shared_prefix(target.label(), label);
+                    let merged_value = if shared_prefix.is_empty() {
+                        // no shared prefix means no overlap with the existing value
+                        util::value_element(label, value, vec![])
+                    } else {
+                        // creates a common parent node
+                        let shared_prefix = shared_prefix.to_owned();
+                        let origin = entry.remove(index);
+                        let new_node =
+                            util::value_element(&label[shared_prefix.len()..], value, vec![]);
+                        Self::join_intersected_nodes(origin, new_node, shared_prefix)
+                    };
+                    return entry.insert(index, merged_value);
+                }
+                ExactMatch(index) => {
+                    let target = &mut entry[index];
+                    if let Some(old_value) = target.value_mut() {
+                        // replace existing value
+                        *old_value = value;
+                    } else {
+                        // if the existing one is Node, make it a Value
+                        let children = entry.remove(index).children_own();
+                        entry.insert(index, util::value_element(label, value, children));
+                    }
+                    return;
+                }
+                PrefixMatch(index) => {
+                    let target = &mut entry[index];
+                    label = &label[target.label().len()..];
+                    entry = target.children_mut();
+                }
             }
         }
     }
 
+    fn insert_prefix_node(entry: &mut Vec<Element<T>>, index: usize, label: &str, value: T) {
+        let mut origin = entry.remove(index);
+        origin.remove_label_prefix(label.len());
+        let new_value = util::value_element(label, value, vec![origin]);
+        return entry.insert(index, new_value);
+    }
+
     /// When two nodes have intersected labels, call this helper to process
     fn join_intersected_nodes(
-        original: Element<T>,
+        mut original: Element<T>,
         new: Element<T>,
-        shared_common: String,
+        shared_prefix: String,
     ) -> Element<T> {
-        let new_original_label = original.label()[shared_common.len()..].to_owned();
-        let original_item = original.set_label(new_original_label);
-        let mut children = vec![original_item, new];
+        original.remove_label_prefix(shared_prefix.len());
+        let mut children = vec![original, new];
         children.sort_by(|e1, e2| e1.label().cmp(e2.label()));
         Element::Node {
-            label: shared_common,
+            label: shared_prefix,
             children,
         }
     }
@@ -109,21 +144,16 @@ impl<T> RadixTrie<T> {
     pub fn find(&self, mut label: &str) -> Option<&T> {
         let mut entry = self.entry.children();
         while label.len() > 0 {
-            let target_index = util::binary_search(label.chars().next().unwrap(), &entry);
-            if target_index >= entry.len() {
-                break;
-            }
-            let target = &entry[target_index];
-            if target.label() == label {
-                // found label
-                return target.value();
-            } else if label.starts_with(target.label()) {
-                // existing_label matches the prefix of label. Move to next node
-                label = &label[target.label().len()..];
-                entry = target.children();
-            } else {
-                // not matched
-                break;
+            match Self::find_from_entry(&entry, label) {
+                NotMatch(_) | AsPrefixOf(_) | BeyondSizeLimit => break,
+                PrefixMatch(target_index) => {
+                    let target = &entry[target_index];
+                    label = &label[target.label().len()..];
+                    entry = target.children();
+                }
+                ExactMatch(target_index) => {
+                    return entry[target_index].value();
+                }
             }
         }
         None
@@ -143,21 +173,16 @@ impl<T> RadixTrie<T> {
     pub fn find_mut(&mut self, mut label: &str) -> Option<&mut T> {
         let mut entry = self.entry.children_mut();
         while label.len() > 0 {
-            let target_index = util::binary_search(label.chars().next().unwrap(), &entry);
-            if target_index >= entry.len() {
-                break;
-            }
-            let target = &mut entry[target_index];
-            if target.label() == label {
-                // found label
-                return target.value_mut();
-            } else if label.starts_with(target.label()) {
-                // existing_label matches the prefix of label. Move to next node
-                label = &label[target.label().len()..];
-                entry = target.children_mut();
-            } else {
-                // not matched
-                break;
+            match Self::find_from_entry(&entry, label) {
+                NotMatch(_) | AsPrefixOf(_) | BeyondSizeLimit => break,
+                PrefixMatch(target_index) => {
+                    let target = &mut entry[target_index];
+                    label = &label[target.label().len()..];
+                    entry = target.children_mut();
+                }
+                ExactMatch(target_index) => {
+                    return entry[target_index].value_mut();
+                }
             }
         }
         None
@@ -177,44 +202,36 @@ impl<T> RadixTrie<T> {
     pub fn remove(&mut self, mut label: &str) -> Option<T> {
         let mut parent = &mut self.entry;
         while label.len() > 0 {
-            let parent_is_node = parent.is_node();
-            let target_index =
-                util::binary_search(label.chars().next().unwrap(), parent.children());
-            if target_index >= parent.children().len() {
-                break;
-            }
-            let target = &parent.children()[target_index];
-            if target.label() == label {
-                // existing_label matches label
-                let (label, value, mut children) =
-                    parent.children_mut().remove(target_index).unpack();
-                if children.len() > 1 {
-                    // target node has more than one children. Make target node a none value node
-                    parent
-                        .children_mut()
-                        .insert(target_index, Element::Node { label, children });
-                } else if children.len() == 1 {
-                    // Only one child. Make the child parent
-                    let child = children.pop().unwrap();
-                    // Connect parent prefix with the child label
-                    let child_label_prepend_parent_prefix = format!("{}{}", label, child.label());
-                    parent.children_mut().insert(
-                        target_index,
-                        child.set_label(child_label_prepend_parent_prefix),
-                    );
+            match Self::find_from_entry(parent.children(), label) {
+                BeyondSizeLimit | NotMatch(_) | AsPrefixOf(_) => break,
+                ExactMatch(target_index) => {
+                    let parent_is_node = parent.is_node();
+                    let (label, value, mut children) =
+                        parent.children_mut().remove(target_index).unpack();
+                    if children.len() > 1 {
+                        // target node has more than one children. Make target node a none value node
+                        parent
+                            .children_mut()
+                            .insert(target_index, Element::Node { label, children });
+                    } else if children.len() == 1 {
+                        // Only one child. Make the child parent
+                        let mut child = children.pop().unwrap();
+                        child.add_label_prefix(label);
+                        parent.children_mut().insert(target_index, child);
+                    }
+                    // if parent has only one node child and parent is node. Merge them
+                    if parent.children().len() == 1 && parent_is_node {
+                        let mut another_child = parent.children_mut().pop().unwrap();
+                        another_child.add_label_prefix(parent.label());
+                        *parent = another_child;
+                    }
+                    return value;
                 }
-                // if parent has only one node child and parent is node. Merge them
-                if parent.children().len() == 1 && parent_is_node {
-                    let another_child = parent.children_mut().pop().unwrap();
-                    let label = format!("{}{}", parent.label(), another_child.label());
-                    *parent = another_child.set_label(label);
+                PrefixMatch(target_index) => {
+                    let target = &parent.children()[target_index];
+                    label = &label[target.label().len()..];
+                    parent = &mut parent.children_mut()[target_index];
                 }
-                return value;
-            } else if label.starts_with(target.label()) {
-                label = &label[target.label().len()..];
-                parent = &mut parent.children_mut()[target_index];
-            } else {
-                break;
             }
         }
         None
@@ -234,30 +251,49 @@ impl<T> RadixTrie<T> {
         let mut entry = self.entry.children();
         let mut prefixes: Vec<&str> = vec![];
         while prefix.len() > 0 {
-            let target_index = util::binary_search(prefix.chars().next().unwrap(), &entry);
-            if target_index >= entry.len() {
-                break;
-            }
-            let target = &entry[target_index];
-            if target.label().starts_with(prefix) {
-                // found label
-                let existing_prefix: String = prefixes.join("");
-                return target
-                    .collect_all_child_values()
-                    .into_iter()
-                    .map(|(prefix, value)| (format!("{}{}", existing_prefix, prefix), value))
-                    .collect();
-            } else if prefix.starts_with(target.label()) {
-                // existing_label matches the prefix of label. Move to next node
-                prefixes.push(target.label());
-                prefix = &prefix[target.label().len()..];
-                entry = target.children();
-            } else {
-                // not matched
-                break;
+            match Self::find_from_entry(entry, prefix) {
+                BeyondSizeLimit | NotMatch(_) => break,
+                PrefixMatch(target_index) => {
+                    // existing_label matches the prefix of label. Move to next node
+                    let target = &entry[target_index];
+                    prefixes.push(target.label());
+                    prefix = &prefix[target.label().len()..];
+                    entry = target.children();
+                }
+                ExactMatch(target_index) | AsPrefixOf(target_index) => {
+                    let existing_prefix: String = prefixes.join("");
+                    return Self::format_children(&entry[target_index], &existing_prefix);
+                }
             }
         }
         vec![]
+    }
+
+    fn format_children<'a>(entry: &'a Element<T>, prefix: &str) -> Vec<(String, &'a T)> {
+        entry
+            .collect_all_child_values()
+            .into_iter()
+            .map(|(label, value)| (format!("{}{}", prefix, label), value))
+            .collect()
+    }
+
+    /// Run a binary search on the given entry and return outcome based on different conditions
+    fn find_from_entry(entry: &[Element<T>], label: &str) -> FindOutcome {
+        let char = util::first_char(label);
+        let target_index = util::binary_search(char, entry);
+        if target_index >= entry.len() {
+            return BeyondSizeLimit;
+        }
+        let target = entry[target_index].label();
+        if target == label {
+            ExactMatch(target_index)
+        } else if label.starts_with(target) {
+            PrefixMatch(target_index)
+        } else if target.starts_with(label) {
+            AsPrefixOf(target_index)
+        } else {
+            NotMatch(target_index)
+        }
     }
 }
 

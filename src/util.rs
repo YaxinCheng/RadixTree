@@ -1,6 +1,6 @@
 use crate::element::Element;
 
-pub fn binary_search<T>(target: char, array: &Vec<Element<T>>) -> usize {
+pub fn binary_search<T>(target: char, array: &[Element<T>]) -> usize {
     let mut first = 0;
     let mut last = array.len();
     while first < last {
@@ -25,16 +25,19 @@ pub fn longest_shared_prefix<'a>(s1: &'a str, s2: &'a str) -> &'a str {
 }
 
 /// A helper function to create an value element
-pub fn element_new_value<T, S: ToString>(
-    label: S,
-    value: T,
-    children: Vec<Element<T>>,
-) -> Element<T> {
+pub fn value_element<T, S: ToString>(label: S, value: T, children: Vec<Element<T>>) -> Element<T> {
     Element::Value {
         label: label.to_string(),
         value,
         children,
     }
+}
+
+pub fn first_char<S: AsRef<str>>(s: S) -> char {
+    s.as_ref()
+        .chars()
+        .next()
+        .expect("First char called on empty string")
 }
 
 #[cfg(test)]

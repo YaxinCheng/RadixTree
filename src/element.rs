@@ -32,27 +32,20 @@ macro_rules! unpack {
 }
 
 impl<T> Element<T> {
+    pub fn remove_label_prefix(&mut self, prefix_len: usize) {
+        self.label_mut().replace_range(..prefix_len, "");
+    }
+
+    pub fn add_label_prefix<S: AsRef<str>>(&mut self, prefix: S) {
+        self.label_mut().insert_str(0, prefix.as_ref());
+    }
+
     pub fn label(&self) -> &str {
         unpack!(self).0
     }
 
-    pub fn set_label(self, label: String) -> Self {
-        match self {
-            Element::Value {
-                label: _,
-                value,
-                children,
-            } => Element::Value {
-                label,
-                value,
-                children,
-            },
-            Element::Node { label: _, children } => Element::Node { label, children },
-            Element::Base {
-                label: _,
-                children: _,
-            } => panic!("Cannot set base"),
-        }
+    fn label_mut(&mut self) -> &mut String {
+        unpack!(self).0
     }
 
     pub fn children_mut(&mut self) -> &mut Vec<Element<T>> {
